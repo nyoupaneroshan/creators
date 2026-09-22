@@ -1,0 +1,164 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String          @id @default(cuid())
+  email           String          @unique
+  passwordHash    String
+  name            String
+  role            String          @default("CREATOR") // "ADMIN" | "MANAGER" | "CREATOR"
+  assignedCountry String?         // For Managers: e.g. "Nepal, India", "United States", "Global"
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  creatorProfile  CreatorProfile?
+}
+
+model Country {
+  id          String   @id @default(cuid())
+  name        String   @unique // e.g. "Nepal", "India", "United States"
+  code        String?  // e.g. "NP", "IN", "US"
+  currency    String?  // e.g. "USD", "NPR", "INR"
+  defaultRate String?  // e.g. "$75 / week", "$100 / week"
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model OnboardingConfig {
+  id                  String   @id @default("default")
+  country             String   @default("Global") // "Global" or specific country e.g. "Nepal", "India"
+  welcomeTitle        String   @default("Welcome to the Amora Creator Team!")
+  welcomeMessage      String   @default("Congratulations on being hired! Please complete the onboarding checklist below to begin your weekly video batches.")
+  
+  // Contract signing step
+  requireContract     Boolean  @default(true)
+  contractTitle       String   @default("Creator Service Agreement (15 Videos Weekly)")
+  contractTerms       String   @default("This agreement confirms creator deliverables of 15 short-form vertical videos weekly with prompt submission and quality standards. Payout is processed weekly upon deliverable submission.")
+  contractLink        String?  // External contract doc link (e.g., DocuSign, Notion, or Google Doc) if applicable
+  
+  // Discord community step
+  requireDiscord      Boolean  @default(true)
+  discordInviteUrl    String   @default("https://discord.gg/amora-creators")
+  discordDescription  String   @default("Join our private Discord server to receive weekly creative briefs, music trends, and direct assistance from Roshan and talent leads.")
+  
+  // Payment info step
+  requirePaymentInfo  Boolean  @default(true)
+  paymentInstructions String   @default("Submit your preferred payout method (Bank Account, eSewa, UPI, PayPal, or Wise) so your weekly payout is sent automatically.")
+  
+  // Creative drive / guidelines step
+  requireDriveAccess  Boolean  @default(true)
+  driveUrl            String?  @default("https://drive.google.com/drive/folders/amora-guidelines")
+  driveInstructions   String   @default("Access creative briefs, brand assets, hook formulas, and upload guidelines.")
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model CreatorProfile {
+  id              String            @id @default(cuid())
+  userId          String            @unique
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Location & Contact (Country is used for Manager scoping)
+  country         String            @default("Nepal") // e.g. "Nepal", "United States", "India", "Global"
+  location        String?           // e.g. "Kathmandu", "Mumbai", "Los Angeles, CA"
+  phone           String?
+  bio             String?
+  avatarUrl       String?
+  
+  // Content & Platforms
+  niches          String            @default("UGC, Lifestyle")
+  platforms       String            @default("Instagram, TikTok, YouTube Shorts") // Supported posting platforms
+  rateExpectation String?           // e.g. "$75 / week (Nepal)"
+  
+  // Social Profiles
+  instagramHandle     String?
+  instagramUrl        String?
+  instagramFollowers  String?
+  
+  tiktokHandle        String?
+  tiktokUrl           String?
+  tiktokFollowers     String?
+  
+  youtubeHandle       String?
+  youtubeUrl          String?
+  youtubeSubscribers  String?
+  
+  portfolioUrl        String?
+  
+  // Pipeline Stage: "PENDING_REVIEW" | "VIEWED" | "SHORTLISTED" | "HIRED" | "DECLINED"
+  status          String            @default("PENDING_REVIEW")
+  statusMessage   String?           // Visible to creator: note from manager or admin
+  viewedAt        DateTime?         // First time reviewed by manager or admin
+  
+  // Post-Hiring Onboarding Milestones
+  contractSignedAt    DateTime?     // When creator signed / agreed to contract
+  contractSignedName  String?       // Legal name used when signing
+  discordJoinedAt     DateTime?     // When creator confirmed joining Discord
+  payoutDetails       String?       // e.g. "eSewa ID: 9801234567" or "UPI: name@okhdfc" or "Bank: Nabil Bank..."
+  onboardingComplete  Boolean       @default(false)
+  
+  // Manager / Admin Internal Evaluation (Private)
+  adminRating     Int?              // 1 to 5 stars
+  adminNotes      String?           // Internal review notes
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  sampleVideos    SampleVideo[]
+  assignments     ProjectAssignment[]
+}
+
+model SampleVideo {
+  id               String         @id @default(cuid())
+  creatorProfileId String
+  creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+  
+  title            String
+  url              String
+  platform         String         @default("DIRECT") // YOUTUBE, TIKTOK, VIMEO, LOOM, DIRECT
+  description      String?
+  createdAt        DateTime       @default(now())
+}
+
+model Project {
+  id              String              @id @default(cuid())
+  title           String
+  brand           String
+  description     String
+  deliverables    String              // e.g. "15x Short-form videos weekly (15-60s)"
+  country         String              @default("Global") // "Nepal", "United States", "Global" -> Localized pay rate
+  targetPlatforms String              @default("TikTok, Instagram Reels, YouTube Shorts") // Platforms creator must post to
+  budget          String?             // e.g. "$75 / week", "$100 / week"
+  deadline        String?             // e.g. "Weekly Ongoing"
+  status          String              @default("ACTIVE") // ACTIVE, DRAFT, COMPLETED
+  niches          String              @default("UGC, Lifestyle")
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  assignments     ProjectAssignment[]
+}
+
+model ProjectAssignment {
+  id               String         @id @default(cuid())
+  projectId        String
+  project          Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creatorProfileId String
+  creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+  
+  status           String         @default("ASSIGNED") // ASSIGNED, IN_PROGRESS, SUBMITTED, APPROVED
+  payout           String?        // Agreed payout per batch (e.g. "$75 / week")
+  notes            String?        // Manager or Admin instructions
+  assignedByUserId String?        // User ID of the Manager or Admin who assigned
+  assignedAt       DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([projectId, creatorProfileId])
+}
